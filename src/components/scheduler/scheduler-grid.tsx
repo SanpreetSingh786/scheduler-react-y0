@@ -31,8 +31,6 @@ interface Task {
   color: string
   startTime?: string
   endTime?: string
-  endDate?: string
-  isMultiDay?: boolean
 }
 
 interface ResourceGroup {
@@ -79,19 +77,31 @@ export function SchedulerGrid({
   onTeamMemberReorder,
 }: SchedulerGridProps) {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
-  const [draggedResourceGroup, setDraggedResourceGroup] = useState<{ groupId: string; index: number } | null>(null)
+  const [draggedResource, setDraggedResource] = useState<{ member: TeamMember; index: number } | null>(null)
   const [dragOverCell, setDragOverCell] = useState<string | null>(null)
   const [dragOverResource, setDragOverResource] = useState<number | null>(null)
   const [timeZoomLevel, setTimeZoomLevel] = useState<TimeZoomLevel>("1hour")
   const [dateZoomLevel, setDateZoomLevel] = useState(6)
+  const [resizingTask, setResizingTask] = useState<{
+    taskId: string
+    edge: "start" | "end"
+    originalTask: Task
+  } | null>(null)
   const [currentWeekStart, setCurrentWeekStart] = useState(new Date("2025-06-20"))
   const [resourceGroups, setResourceGroups] = useState<ResourceGroup[]>([])
 
   const containerRef = useRef<HTMLDivElement>(null)
+  const resizeRef = useRef<{
+    startX: number
+    originalStart: number
+    originalEnd: number
+    cellWidth: number
+    pixelsPerMinute: number
+  } | null>(null)
 
   // Initialize resource groups from team members
   useEffect(() => {
-    const groups = teamMembers.map((member, index) => ({
+    const groups = teamMembers.map((member) => ({
       id: member.id,
       name: member.name,
       instances: [
@@ -150,7 +160,7 @@ export function SchedulerGrid({
     )
   }
 
-  // Responsive settings
+  // Responsive spacing based on zoom level and screen size
   const getResponsiveSettings = (timeZoom: TimeZoomLevel, dateZoom: number) => {
     const screenWidth = typeof window !== "undefined" ? window.innerWidth : 1200
     const availableWidth = screenWidth - 250
@@ -243,66 +253,83 @@ export function SchedulerGrid({
   const timeColumns = generateTimeColumns()
   const cellWidth = responsiveSettings.baseWidth
 
-  // Get tasks for a specific assignee (no duplication for multi-day)
-  const getTasksForAssignee = (assignee: string) => {
-    return tasks.filter((task) => task.assignee === assignee)
-  }
-
-  // Calculate multi-day task positioning
-  const getMultiDayTaskPosition = (task: Task) => {
-    if (!task.isMultiDay || !task.endDate) return null
-
-    const startIndex = weekDates.findIndex((d) => d.date === task.date)
-    const endIndex = weekDates.findIndex((d) => d.date === task.endDate)
-
-    if (startIndex === -1) return null
-
-    const actualEndIndex = endIndex === -1 ? weekDates.length - 1 : endIndex
-    const spanDays = actualEndIndex - startIndex + 1
-
-    return {
-      startIndex,
-      spanDays,
-      left: `${startIndex * (100 / weekDates.length)}%`,
-      width: `${spanDays * (100 / weekDates.length)}%`,
+  // Window resize handler
+  useEffect(() => {
+    const handleResize = () => {
+      setTimeZoomLevel((prev) => prev)
     }
+
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
+  // Mouse wheel zoom handler
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        const delta = e.deltaY > 0 ? -1 : 1
+
+        if (e.shiftKey) {
+          setDateZoomLevel((prev) => Math.max(1, Math.min(14, prev + delta)))
+        } else {
+          const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour", "30min"]
+          const currentIndex = zoomOrder.indexOf(timeZoomLevel)
+
+          if (delta > 0 && currentIndex < zoomOrder.length - 1) {
+            setTimeZoomLevel(zoomOrder[currentIndex + 1])
+          } else if (delta < 0 && currentIndex > 0) {
+            setTimeZoomLevel(zoomOrder[currentIndex - 1])
+          }
+        }
+      }
+    }
+
+    const container = containerRef.current
+    if (container) {
+      container.addEventListener("wheel", handleWheel, { passive: false })
+      return () => container.removeEventListener("wheel", handleWheel)
+    }
+  }, [timeZoomLevel])
+
+  const getTasksForCell = (assignee: string, date: string) => {
+    return tasks
+      .filter((task) => task.assignee === assignee && task.date === date)
+      .sort((a, b) => {
+        if (!a.startTime || !b.startTime) return 0
+        return a.startTime.localeCompare(b.startTime)
+      })
   }
 
-  // Resource group drag handlers
-  const handleResourceGroupDragStart = (e: React.DragEvent, groupId: string, index: number) => {
-    setDraggedResourceGroup({ groupId, index })
+  // Resource drag handlers
+  const handleResourceDragStart = (e: React.DragEvent, member: TeamMemberInstance, index: number) => {
+    setDraggedResource({ member, index })
     e.dataTransfer.effectAllowed = "move"
-    e.dataTransfer.setData("text/plain", groupId)
+    e.dataTransfer.setData("text/plain", member.id)
     ;(e.currentTarget as HTMLElement).style.opacity = "0.5"
   }
 
-  const handleResourceGroupDragEnd = (e: React.DragEvent) => {
+  const handleResourceDragEnd = (e: React.DragEvent) => {
     ;(e.currentTarget as HTMLElement).style.opacity = "1"
-    setDraggedResourceGroup(null)
+    setDraggedResource(null)
     setDragOverResource(null)
   }
 
-  const handleResourceGroupDragOver = (e: React.DragEvent) => {
+  const handleResourceDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = "move"
   }
 
-  const handleResourceGroupDragEnter = (index: number) => {
+  const handleResourceDragEnter = (index: number) => {
     setDragOverResource(index)
   }
 
-  const handleResourceGroupDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleResourceDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault()
-    if (draggedResourceGroup && onTeamMemberReorder && draggedResourceGroup.index !== targetIndex) {
-      onTeamMemberReorder(draggedResourceGroup.index, targetIndex)
-
-      // Reorder resource groups locally
-      const newGroups = [...resourceGroups]
-      const [movedGroup] = newGroups.splice(draggedResourceGroup.index, 1)
-      newGroups.splice(targetIndex, 0, movedGroup)
-      setResourceGroups(newGroups)
+    if (draggedResource && onTeamMemberReorder && draggedResource.index !== targetIndex) {
+      onTeamMemberReorder(draggedResource.index, targetIndex)
     }
-    setDraggedResourceGroup(null)
+    setDraggedResource(null)
     setDragOverResource(null)
   }
 
@@ -337,10 +364,31 @@ export function SchedulerGrid({
     e.preventDefault()
     if (!draggedTask || !onTaskUpdate) return
 
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const timePercentage = x / cellWidth
+    const newTimeMinutes = Math.round((timePercentage * 24 * 60) / 15) * 15
+
+    const newHour = Math.floor(newTimeMinutes / 60)
+    const newMinute = newTimeMinutes % 60
+    const newTime = `${newHour.toString().padStart(2, "0")}:${newMinute.toString().padStart(2, "0")}`
+
     const updatedTask = {
       ...draggedTask,
       assignee,
       date,
+      startTime: newTime,
+      endTime: draggedTask.endTime
+        ? (() => {
+            const originalStart = timeToMinutes(draggedTask.startTime!)
+            const originalEnd = timeToMinutes(draggedTask.endTime!)
+            const duration = originalEnd - originalStart
+            const newEndMinutes = Math.min(24 * 60 - 1, newTimeMinutes + duration)
+            const endHour = Math.floor(newEndMinutes / 60)
+            const endMinute = newEndMinutes % 60
+            return `${endHour.toString().padStart(2, "0")}:${endMinute.toString().padStart(2, "0")}`
+          })()
+        : undefined,
     }
 
     onTaskUpdate(updatedTask)
@@ -361,6 +409,12 @@ export function SchedulerGrid({
     return hours * 60 + minutes
   }
 
+  const minutesToTime = (minutes: number) => {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
+  }
+
   const getTaskPosition = (task: Task, cellWidth: number) => {
     if (!task.startTime) return null
 
@@ -377,15 +431,68 @@ export function SchedulerGrid({
     }
   }
 
-  const navigateWeek = (direction: "prev" | "next") => {
-    const newDate = new Date(currentWeekStart)
-    const daysToMove = Math.max(1, Math.floor(dateZoomLevel / 2))
-    if (direction === "prev") {
-      newDate.setDate(newDate.getDate() - daysToMove)
-    } else {
-      newDate.setDate(newDate.getDate() + daysToMove)
+  // Enhanced resize handlers with precise time calculation
+  const handleResizeStart = (e: React.MouseEvent, taskId: string, edge: "start" | "end") => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task || !task.startTime || !onTaskUpdate) return
+
+    setResizingTask({ taskId, edge, originalTask: task })
+
+    const startMinutes = timeToMinutes(task.startTime)
+    const endMinutes = task.endTime ? timeToMinutes(task.endTime) : startMinutes + 60
+    const viewDuration = 24 * 60
+    const pixelsPerMinute = cellWidth / viewDuration
+
+    resizeRef.current = {
+      startX: e.clientX,
+      originalStart: startMinutes,
+      originalEnd: endMinutes,
+      cellWidth: cellWidth,
+      pixelsPerMinute: pixelsPerMinute,
     }
-    setCurrentWeekStart(newDate)
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizeRef.current || !resizingTask || !onTaskUpdate) return
+
+      const deltaX = e.clientX - resizeRef.current.startX
+      const deltaMinutes = Math.round(deltaX / resizeRef.current.pixelsPerMinute / 5) * 5 // 5-minute precision
+
+      let newStartMinutes = resizeRef.current.originalStart
+      let newEndMinutes = resizeRef.current.originalEnd
+
+      if (edge === "start") {
+        newStartMinutes = Math.max(
+          0,
+          Math.min(resizeRef.current.originalEnd - 5, resizeRef.current.originalStart + deltaMinutes),
+        )
+      } else {
+        newEndMinutes = Math.max(
+          resizeRef.current.originalStart + 5,
+          Math.min(24 * 60 - 1, resizeRef.current.originalEnd + deltaMinutes),
+        )
+      }
+
+      const updatedTask = {
+        ...task,
+        startTime: minutesToTime(newStartMinutes),
+        endTime: minutesToTime(newEndMinutes),
+      }
+
+      onTaskUpdate(updatedTask)
+    }
+
+    const handleMouseUp = () => {
+      setResizingTask(null)
+      resizeRef.current = null
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", handleMouseUp)
   }
 
   const handleTimeZoomIn = () => {
@@ -407,6 +514,17 @@ export function SchedulerGrid({
   const resetView = () => {
     setTimeZoomLevel("1hour")
     setDateZoomLevel(6)
+  }
+
+  const navigateWeek = (direction: "prev" | "next") => {
+    const newDate = new Date(currentWeekStart)
+    const daysToMove = Math.max(1, Math.floor(dateZoomLevel / 2))
+    if (direction === "prev") {
+      newDate.setDate(newDate.getDate() - daysToMove)
+    } else {
+      newDate.setDate(newDate.getDate() + daysToMove)
+    }
+    setCurrentWeekStart(newDate)
   }
 
   return (
@@ -541,30 +659,17 @@ export function SchedulerGrid({
             ))}
           </div>
 
-          {/* Team Member Rows - Draggable as whole groups */}
+          {/* Team Member Rows - Now Draggable */}
           {resourceGroups.map((group, groupIndex) => (
             <React.Fragment key={group.id}>
-              {/* Draggable Group Header */}
-              <div
-                className={cn(
-                  "flex border-b bg-gray-100 cursor-move hover:bg-gray-200 transition-colors",
-                  dragOverResource === groupIndex && "bg-blue-100 border-blue-300",
-                )}
-                style={{ minHeight: "60px" }}
-                draggable
-                onDragStart={(e) => handleResourceGroupDragStart(e, group.id, groupIndex)}
-                onDragEnd={handleResourceGroupDragEnd}
-                onDragOver={handleResourceGroupDragOver}
-                onDragEnter={() => handleResourceGroupDragEnter(groupIndex)}
-                onDrop={(e) => handleResourceGroupDrop(e, groupIndex)}
-              >
+              {/* Group Header */}
+              <div className="flex border-b bg-gray-100" style={{ minHeight: "60px" }}>
                 <div
                   className="bg-gray-200 p-3 font-medium flex items-center border-r flex-shrink-0 cursor-pointer hover:bg-gray-300 transition-colors"
                   style={{ width: "200px" }}
                   onClick={() => toggleGroupExpansion(group.id)}
                 >
                   <div className="flex items-center space-x-2 w-full">
-                    <GripVertical className="h-4 w-4 text-gray-400" />
                     <ChevronRightIcon className={cn("h-4 w-4 transition-transform", group.isExpanded && "rotate-90")} />
                     <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                       {group.name.charAt(0)}
@@ -595,17 +700,11 @@ export function SchedulerGrid({
                     style={{ width: `${cellWidth}px` }}
                   >
                     <Badge variant="secondary" className="text-xs">
-                      {
-                        getTasksForAssignee(group.name).filter((task) => {
-                          if (task.isMultiDay && task.endDate) {
-                            const taskStart = new Date(task.date)
-                            const taskEnd = new Date(task.endDate)
-                            const currentDate = new Date(dateObj.date)
-                            return currentDate >= taskStart && currentDate <= taskEnd
-                          }
-                          return task.date === dateObj.date
-                        }).length
-                      }
+                      {group.instances.reduce(
+                        (total, instance) =>
+                          total + getTasksForCell(instance.instanceName || instance.name, dateObj.date).length,
+                        0,
+                      )}
                     </Badge>
                   </div>
                 ))}
@@ -614,13 +713,23 @@ export function SchedulerGrid({
               {/* Resource Instances */}
               {group.isExpanded &&
                 group.instances.map((instance, instanceIndex) => (
-                  <div key={instance.id} className="flex border-b relative" style={{ minHeight: "140px" }}>
-                    {/* Resource Instance */}
+                  <div key={instance.id} className="flex border-b" style={{ minHeight: "140px" }}>
+                    {/* Draggable Resource Instance */}
                     <div
-                      className="bg-white p-3 font-medium flex items-center border-r flex-shrink-0 border-l-4 border-blue-500"
+                      draggable
+                      onDragStart={(e) => handleResourceDragStart(e, instance, groupIndex * 100 + instanceIndex)}
+                      onDragEnd={handleResourceDragEnd}
+                      onDragOver={handleResourceDragOver}
+                      onDragEnter={() => handleResourceDragEnter(groupIndex * 100 + instanceIndex)}
+                      onDrop={(e) => handleResourceDrop(e, groupIndex * 100 + instanceIndex)}
+                      className={cn(
+                        "bg-white p-3 font-medium flex items-center border-r flex-shrink-0 cursor-move hover:bg-gray-50 transition-colors group border-l-4 border-blue-500",
+                        dragOverResource === groupIndex * 100 + instanceIndex && "bg-blue-50 border-blue-300",
+                      )}
                       style={{ width: "200px" }}
                     >
                       <div className="flex items-center space-x-2 w-full">
+                        <GripVertical className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <div className="w-6 h-6 bg-blue-400 rounded-full flex items-center justify-center text-white text-xs">
                           {instance.instanceId}
                         </div>
@@ -633,7 +742,7 @@ export function SchedulerGrid({
                               e.stopPropagation()
                               removeResourceInstance(group.id, instance.instanceId)
                             }}
-                            className="h-5 w-5 p-0"
+                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
                           >
                             <X className="h-3 w-3" />
                           </Button>
@@ -641,123 +750,50 @@ export function SchedulerGrid({
                       </div>
                     </div>
 
-                    {/* Timeline Row Container */}
-                    <div className="flex-1 relative">
-                      {/* Date columns grid background */}
-                      <div className="absolute inset-0 flex">
-                        {weekDates.map((dateObj) => (
-                          <div
-                            key={`bg-${dateObj.date}`}
-                            className="flex-1 border-r bg-white hover:bg-gray-50 cursor-pointer transition-colors"
-                            onClick={() => onCellClick?.(instance.instanceName || instance.name, dateObj.date)}
-                            onDragOver={handleTaskDragOver}
-                            onDragEnter={() =>
-                              handleTaskDragEnter(instance.instanceName || instance.name, dateObj.date)
-                            }
-                            onDragLeave={handleTaskDragLeave}
-                            onDrop={(e) => handleTaskDrop(e, instance.instanceName || instance.name, dateObj.date)}
-                          >
-                            {/* Hour grid lines */}
-                            <div className="absolute inset-0 flex">
-                              {timeColumns.map((timeCol) => (
-                                <div
-                                  key={`grid-${timeCol.minutes}`}
-                                  className={cn(
-                                    "flex-shrink-0",
-                                    timeCol.isMajorMark ? "border-r-2 border-gray-300" : "border-r border-gray-100",
-                                    timeCol.isNightTime && "bg-gray-50",
-                                  )}
-                                  style={{
-                                    width: `${cellWidth / timeColumns.length}px`,
-                                  }}
-                                />
-                              ))}
-                            </div>
+                    {/* Date columns with timeline for each instance */}
+                    {weekDates.map((dateObj) => {
+                      const cellTasks = getTasksForCell(instance.instanceName || instance.name, dateObj.date)
+                      const cellId = `${instance.id}-${dateObj.date}`
+                      const isDragOver = dragOverCell === cellId
 
-                            {/* Add task button overlay */}
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black bg-opacity-5 transition-opacity">
-                              <Plus className="h-6 w-6 text-gray-400" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Tasks Layer - Multi-day tasks span across columns */}
-                      <div className="absolute inset-0 pointer-events-none">
-                        {getTasksForAssignee(instance.name).map((task, taskIndex) => {
-                          if (task.isMultiDay && task.endDate) {
-                            // Multi-day task spanning across columns - SINGLE CONTINUOUS BAR
-                            const multiDayPosition = getMultiDayTaskPosition(task)
-                            if (!multiDayPosition) return null
-
-                            return (
+                      return (
+                        <div
+                          key={cellId}
+                          className={cn(
+                            "relative border-r bg-white hover:bg-gray-50 cursor-pointer transition-colors group flex-shrink-0",
+                            isDragOver && "bg-blue-50 border-blue-300",
+                          )}
+                          style={{ width: `${cellWidth}px` }}
+                          onClick={() => onCellClick?.(instance.instanceName || instance.name, dateObj.date)}
+                          onDragOver={handleTaskDragOver}
+                          onDragEnter={() => handleTaskDragEnter(instance.instanceName || instance.name, dateObj.date)}
+                          onDragLeave={handleTaskDragLeave}
+                          onDrop={(e) => handleTaskDrop(e, instance.instanceName || instance.name, dateObj.date)}
+                        >
+                          {/* Rest of the cell content remains the same */}
+                          {/* 24-hour grid background */}
+                          <div className="absolute inset-0 flex">
+                            {timeColumns.map((timeCol) => (
                               <div
-                                key={task.id}
-                                draggable
-                                onDragStart={(e) => handleTaskDragStart(e, task)}
-                                onDragEnd={handleTaskDragEnd}
+                                key={`bg-${timeCol.minutes}`}
                                 className={cn(
-                                  "absolute text-white text-sm rounded-lg cursor-move hover:opacity-90 transition-all shadow-lg border border-white/30 flex items-center px-3 group/task overflow-hidden pointer-events-auto",
-                                  task.color,
+                                  "flex-shrink-0",
+                                  timeCol.isMajorMark ? "border-r-2 border-gray-300" : "border-r border-gray-100",
+                                  timeCol.isNightTime && "bg-gray-50",
                                 )}
                                 style={{
-                                  left: multiDayPosition.left,
-                                  width: multiDayPosition.width,
-                                  top: `${20 + taskIndex * 40}px`,
-                                  height: "35px",
-                                  zIndex: 10 + taskIndex,
+                                  width: `${cellWidth / timeColumns.length}px`,
                                 }}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onTaskClick?.(task)
-                                }}
-                                title={`${task.title} - Multi-day task (${task.date} to ${task.endDate})`}
-                              >
-                                <div className="flex flex-col justify-center w-full min-w-0 py-1">
-                                  <div className="font-semibold truncate text-xs leading-tight">{task.title}</div>
-                                  {task.startTime && task.endTime && (
-                                    <div className="text-xs opacity-75 leading-tight">
-                                      {formatTime(task.startTime)} - {formatTime(task.endTime)} daily
-                                    </div>
-                                  )}
-                                </div>
+                              />
+                            ))}
+                          </div>
 
-                                <div className="flex items-center space-x-1 opacity-0 group-hover/task:opacity-100 transition-opacity ml-2">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 hover:bg-white/20"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onTaskClick?.(task)
-                                    }}
-                                    title="Edit task"
-                                  >
-                                    <Edit className="h-2.5 w-2.5" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 hover:bg-red-500"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onTaskDelete?.(task.id)
-                                    }}
-                                    title="Delete task"
-                                  >
-                                    <Trash2 className="h-2.5 w-2.5" />
-                                  </Button>
-                                </div>
-                              </div>
-                            )
-                          } else {
-                            // Single-day task - only show on its specific date
-                            const dateIndex = weekDates.findIndex((d) => d.date === task.date)
-                            if (dateIndex === -1) return null
+                          {/* Tasks positioned on timeline */}
+                          <div className="relative h-full">
+                            {cellTasks.map((task, index) => {
+                              const position = getTaskPosition(task, cellWidth)
+                              if (!position) return null
 
-                            const position = getTaskPosition(task, cellWidth)
-                            if (!position) {
-                              // Task without time - show as simple block
                               return (
                                 <div
                                   key={task.id}
@@ -765,93 +801,69 @@ export function SchedulerGrid({
                                   onDragStart={(e) => handleTaskDragStart(e, task)}
                                   onDragEnd={handleTaskDragEnd}
                                   className={cn(
-                                    "absolute text-white text-sm rounded-lg cursor-move hover:opacity-90 transition-all shadow-lg border border-white/30 flex items-center px-2 group/task overflow-hidden pointer-events-auto",
+                                    "absolute text-white text-sm rounded-lg cursor-move hover:opacity-90 transition-all shadow-lg border border-white/30 flex items-center px-2 group/task overflow-hidden",
                                     task.color,
+                                    resizingTask?.taskId === task.id && "ring-2 ring-blue-400",
                                   )}
                                   style={{
-                                    left: `${dateIndex * (100 / weekDates.length)}%`,
-                                    width: `${100 / weekDates.length}%`,
-                                    top: `${20 + taskIndex * 35}px`,
+                                    ...position,
+                                    top: `${20 + index * 35}px`,
                                     height: "30px",
-                                    zIndex: 10 + taskIndex,
+                                    zIndex: 10 + index,
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     onTaskClick?.(task)
                                   }}
-                                  title={task.title}
+                                  title={`${task.title} - ${formatTime(task.startTime!)}${task.endTime ? ` - ${formatTime(task.endTime)}` : ""}`}
                                 >
-                                  <div className="font-semibold truncate text-xs">{task.title}</div>
+                                  <div className="flex flex-col justify-center w-full min-w-0 py-1">
+                                    <div className="font-semibold truncate text-xs leading-tight">{task.title}</div>
+                                  </div>
+
+                                  <div className="flex items-center space-x-1 opacity-0 group-hover/task:opacity-100 transition-opacity ml-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-5 w-5 p-0 hover:bg-white/20"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onTaskClick?.(task)
+                                      }}
+                                      title="Edit task"
+                                    >
+                                      <Edit className="h-2.5 w-2.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-5 w-5 p-0 hover:bg-red-500"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onTaskDelete?.(task.id)
+                                      }}
+                                      title="Delete task"
+                                    >
+                                      <Trash2 className="h-2.5 w-2.5" />
+                                    </Button>
+                                  </div>
                                 </div>
                               )
-                            }
+                            })}
+                          </div>
 
-                            // Task with time - position within the day
-                            const dayWidth = 100 / weekDates.length
-                            const taskLeft =
-                              dateIndex * dayWidth +
-                              (Number.parseFloat(position.left.replace("%", "")) * dayWidth) / 100
-                            const taskWidth = (Number.parseFloat(position.width.replace("%", "")) * dayWidth) / 100
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black bg-opacity-5 transition-opacity">
+                            <Plus className="h-6 w-6 text-gray-400" />
+                          </div>
 
-                            return (
-                              <div
-                                key={task.id}
-                                draggable
-                                onDragStart={(e) => handleTaskDragStart(e, task)}
-                                onDragEnd={handleTaskDragEnd}
-                                className={cn(
-                                  "absolute text-white text-sm rounded-lg cursor-move hover:opacity-90 transition-all shadow-lg border border-white/30 flex items-center px-2 group/task overflow-hidden pointer-events-auto",
-                                  task.color,
-                                )}
-                                style={{
-                                  left: `${taskLeft}%`,
-                                  width: `${Math.max(taskWidth, 5)}%`,
-                                  top: `${20 + taskIndex * 35}px`,
-                                  height: "30px",
-                                  zIndex: 10 + taskIndex,
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  onTaskClick?.(task)
-                                }}
-                                title={`${task.title} - ${formatTime(task.startTime!)}${task.endTime ? ` - ${formatTime(task.endTime)}` : ""}`}
-                              >
-                                <div className="flex flex-col justify-center w-full min-w-0">
-                                  <div className="font-semibold truncate text-xs leading-tight">{task.title}</div>
-                                </div>
-
-                                <div className="flex items-center space-x-1 opacity-0 group-hover/task:opacity-100 transition-opacity ml-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 hover:bg-white/20"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onTaskClick?.(task)
-                                    }}
-                                    title="Edit task"
-                                  >
-                                    <Edit className="h-2.5 w-2.5" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 hover:bg-red-500"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      onTaskDelete?.(task.id)
-                                    }}
-                                    title="Delete task"
-                                  >
-                                    <Trash2 className="h-2.5 w-2.5" />
-                                  </Button>
-                                </div>
-                              </div>
-                            )
-                          }
-                        })}
-                      </div>
-                    </div>
+                          {cellTasks.length > 0 && (
+                            <Badge variant="secondary" className="absolute top-2 right-2 text-xs z-20">
+                              {cellTasks.length}
+                            </Badge>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 ))}
             </React.Fragment>
