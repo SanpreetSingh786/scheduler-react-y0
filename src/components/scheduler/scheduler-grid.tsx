@@ -532,7 +532,7 @@ export function SchedulerGrid({
       {/* Controls */}
       <div className="bg-gray-50 border-b p-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center space-x-4 flex-wrap">
-          <h3 className="text-sm font-semibold text-gray-700">Timeline View</h3>
+          <h3 className="text-sm font-semibold text-gray-700">Timeline Vieww</h3>
 
           {/* Date Navigation */}
           <div className="flex items-center space-x-2">
