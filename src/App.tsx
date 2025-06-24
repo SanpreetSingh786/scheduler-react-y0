@@ -191,8 +191,7 @@ export default function MERNScheduler() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
     { id: "1", name: "Jeremie" },
     { id: "2", name: "Lizzie" },
-    { id: "3", name: "Lamar" },
-    { id: "4", name: "Jeff" },
+    { id: "3", name: "Lamar" },   
   ])
 
   const [currentView, setCurrentView] = useState<ViewType>("grid")

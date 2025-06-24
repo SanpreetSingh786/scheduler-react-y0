@@ -125,6 +125,24 @@ export function TaskDialog({
     setErrors({})
   }, [task, defaultAssignee, defaultDate, open])
 
+  useEffect(() => {
+    if (!open) {
+      // Reset form when dialog closes
+      setFormData({
+        title: "",
+        description: "",
+        assignee: "",
+        date: "",
+        endDate: "",
+        color: "bg-blue-500",
+        startTime: "",
+        endTime: "",
+        isMultiDay: false,
+      })
+      setErrors({})
+    }
+  }, [open])
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
@@ -171,6 +189,9 @@ export function TaskDialog({
     } else {
       onSave(taskData)
     }
+
+    // Explicitly close dialog
+    onOpenChange(false)
   }
 
   const handleDelete = () => {
@@ -212,9 +233,15 @@ export function TaskDialog({
         const hours = Math.floor(duration / 60)
         const minutes = duration % 60
 
-        if (hours === 0) timeDuration = `${minutes}m daily`
-        else if (minutes === 0) timeDuration = `${hours}h daily`
-        else timeDuration = `${hours}h ${minutes}m daily`
+        if (formData.isMultiDay) {
+          // For multi-day: start time on start date, end time on end date
+          timeDuration = `${formatTime(formData.startTime)} start - ${formatTime(formData.endTime)} end`
+        } else {
+          // For single day: show duration
+          if (hours === 0) timeDuration = `${minutes}m`
+          else if (minutes === 0) timeDuration = `${hours}h`
+          else timeDuration = `${hours}h ${minutes}m`
+        }
       }
     }
 
@@ -439,7 +466,7 @@ export function TaskDialog({
                 <span>
                   {formatTime(formData.startTime)}
                   {formData.endTime && ` - ${formatTime(formData.endTime)}`}
-                  {formData.isMultiDay ? " daily" : ""}
+                  {formData.isMultiDay ? "" : ""}
                 </span>
               )}
             </div>

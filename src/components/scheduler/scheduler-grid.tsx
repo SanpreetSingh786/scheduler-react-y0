@@ -64,7 +64,7 @@ interface SchedulerGridProps {
   onTeamMemberReorder?: (fromIndex: number, toIndex: number) => void
 }
 
-type TimeZoomLevel = "30min" | "1hour" | "2hour" | "4hour" | "6hour"
+type TimeZoomLevel =  "1hour" | "2hour" | "4hour" | "6hour"
 
 export function SchedulerGrid({
   tasks,
@@ -166,13 +166,13 @@ export function SchedulerGrid({
     const availableWidth = screenWidth - 250
 
     const timeSettings = {
-      "30min": {
-        interval: 30,
-        baseWidth: Math.max(1200, availableWidth / Math.max(1, dateZoom - 3)),
-        fontSize: "10px",
-        showAllLabels: true,
-        headerHeight: "60px",
-      },
+      // "30min": {
+      //   interval: 30,
+      //   baseWidth: Math.max(1200, availableWidth / Math.max(1, dateZoom - 3)),
+      //   fontSize: "10px",
+      //   showAllLabels: true,
+      //   headerHeight: "60px",
+      // },
       "1hour": {
         interval: 60,
         baseWidth: Math.max(800, availableWidth / Math.max(1, dateZoom - 1)),
@@ -273,7 +273,8 @@ export function SchedulerGrid({
         if (e.shiftKey) {
           setDateZoomLevel((prev) => Math.max(1, Math.min(14, prev + delta)))
         } else {
-          const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour", "30min"]
+          // const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour", "30min"]
+                   const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour"]
           const currentIndex = zoomOrder.indexOf(timeZoomLevel)
 
           if (delta > 0 && currentIndex < zoomOrder.length - 1) {
@@ -496,7 +497,8 @@ export function SchedulerGrid({
   }
 
   const handleTimeZoomIn = () => {
-    const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour", "30min"]
+    // const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour", "30min"]
+        const zoomOrder: TimeZoomLevel[] = ["6hour", "4hour", "2hour", "1hour"]
     const currentIndex = zoomOrder.indexOf(timeZoomLevel)
     if (currentIndex < zoomOrder.length - 1) {
       setTimeZoomLevel(zoomOrder[currentIndex + 1])
@@ -504,7 +506,8 @@ export function SchedulerGrid({
   }
 
   const handleTimeZoomOut = () => {
-    const zoomOrder: TimeZoomLevel[] = ["30min", "1hour", "2hour", "4hour", "6hour"]
+    // const zoomOrder: TimeZoomLevel[] = ["30min", "1hour", "2hour", "4hour", "6hour"]
+        const zoomOrder: TimeZoomLevel[] = [ "1hour", "2hour", "4hour", "6hour"]
     const currentIndex = zoomOrder.indexOf(timeZoomLevel)
     if (currentIndex < zoomOrder.length - 1) {
       setTimeZoomLevel(zoomOrder[currentIndex + 1])
@@ -564,14 +567,14 @@ export function SchedulerGrid({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="30min">30min</SelectItem>
+                {/* <SelectItem value="30min">30min</SelectItem> */}
                 <SelectItem value="1hour">1hour</SelectItem>
                 <SelectItem value="2hour">2hour</SelectItem>
                 <SelectItem value="4hour">4hour</SelectItem>
                 <SelectItem value="6hour">6hour</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm" onClick={handleTimeZoomIn} disabled={timeZoomLevel === "30min"}>
+            <Button variant="outline" size="sm" onClick={handleTimeZoomIn} disabled={timeZoomLevel === "1hour"}>
               <ZoomIn className="h-4 w-4" />
             </Button>
           </div>
@@ -614,7 +617,7 @@ export function SchedulerGrid({
           {/* Date Headers */}
           <div className="flex border-b sticky top-0 bg-white z-10">
             <div className="bg-gray-100 p-3 border-r flex-shrink-0" style={{ width: "200px" }}>
-              <div className="text-xs font-medium text-gray-600">Team / Date</div>
+              <div className="text-xs font-medium text-gray-600">Team / Dateee</div>
             </div>
             {weekDates.map((dateObj) => (
               <div
