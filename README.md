@@ -1,54 +1,30 @@
-# React + TypeScript + Vite
+# MERN Scheduler
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+*Automatically synced with your [v0.dev](https://v0.dev) deployments*
 
-Currently, two official plugins are available:
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/priyamerncodetribe-1007s-projects/v0-mern-scheduler)
+[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/Vjky3KJUbs7)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Overview
 
-## Expanding the ESLint configuration
+This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
+Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Deployment
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+Your project is live at:
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+**[https://vercel.com/priyamerncodetribe-1007s-projects/v0-mern-scheduler](https://vercel.com/priyamerncodetribe-1007s-projects/v0-mern-scheduler)**
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Build your app
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+Continue building your app on:
+
+**[https://v0.dev/chat/projects/Vjky3KJUbs7](https://v0.dev/chat/projects/Vjky3KJUbs7)**
+
+## How It Works
+
+1. Create and modify your project using [v0.dev](https://v0.dev)
+2. Deploy your chats from the v0 interface
+3. Changes are automatically pushed to this repository
+4. Vercel deploys the latest version from this repository

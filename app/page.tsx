@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { MainLayout } from "@/components/layout/main-layout"
 import { SchedulerGrid } from "@/components/scheduler/scheduler-grid"
-import { CalendarMonthView } from "@/components/scheduler/calender-month-view"
+import { CalendarMonthView } from "@/components/scheduler/calendar-month-view"
 import { DayView } from "@/components/scheduler/day-view"
 import { TaskDialog } from "@/components/scheduler/task-dialog"
 import { ViewToggle, type ViewType } from "@/components/scheduler/view-toggle"
@@ -23,8 +23,6 @@ interface Task {
   color: string
   startTime?: string
   endTime?: string
-  endDate?: string // For multi-day tasks
-  isMultiDay?: boolean
 }
 
 interface TeamMember {
@@ -48,13 +46,13 @@ export default function MERNScheduler() {
     },
     {
       id: "2",
-      title: "Multi-day Project",
-      description: "Large project spanning multiple days",
+      title: "Use me",
+      description: "Database optimization task",
       assignee: "Jeremie",
       date: "2025-06-21",
-      endDate: "2025-06-23",
-      color: "bg-purple-500",
-      isMultiDay: true,
+      color: "bg-cyan-500",
+      startTime: "14:00",
+      endTime: "16:00",
     },
     {
       id: "3",
@@ -249,29 +247,7 @@ export default function MERNScheduler() {
         ...taskData,
         id: Date.now().toString(),
       }
-
-      // If it's a multi-day task, create instances for each day
-      if (newTask.isMultiDay && newTask.endDate) {
-        const startDate = new Date(newTask.date)
-        const endDate = new Date(newTask.endDate)
-        const taskInstances: Task[] = []
-
-        const currentDate = new Date(startDate)
-        while (currentDate <= endDate) {
-          taskInstances.push({
-            ...newTask,
-            id: `${newTask.id}-${currentDate.toISOString().split("T")[0]}`,
-            date: currentDate.toISOString().split("T")[0],
-            title: `${newTask.title}${taskInstances.length === 0 ? "" : ` (Day ${taskInstances.length + 1})`}`,
-          })
-          currentDate.setDate(currentDate.getDate() + 1)
-        }
-
-        setTasks([...tasks, ...taskInstances])
-      } else {
-        setTasks([...tasks, newTask])
-      }
-
+      setTasks([...tasks, newTask])
       toast({
         title: "Task Added",
         description: "New task has been successfully added.",
