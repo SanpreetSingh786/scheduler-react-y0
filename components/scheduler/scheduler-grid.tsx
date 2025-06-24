@@ -421,13 +421,13 @@ export function SchedulerGrid({
     const startMinutes = timeToMinutes(task.startTime)
     const endMinutes = task.endTime ? timeToMinutes(task.endTime) : startMinutes + 60
 
-    const viewDuration = 24 * 60
-    const leftPx = (startMinutes / viewDuration) * cellWidth
-    const widthPx = Math.max(60, ((endMinutes - startMinutes) / viewDuration) * cellWidth)
+    const viewDuration = 24 * 60 // Total minutes in a day
+    const leftPercent = (startMinutes / viewDuration) * 100
+    const widthPercent = Math.max(5, ((endMinutes - startMinutes) / viewDuration) * 100)
 
     return {
-      left: `${leftPx}px`,
-      width: `${widthPx}px`,
+      left: `${leftPercent}%`,
+      width: `${widthPercent}%`,
     }
   }
 
@@ -532,7 +532,7 @@ export function SchedulerGrid({
       {/* Controls */}
       <div className="bg-gray-50 border-b p-3 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center space-x-4 flex-wrap">
-          <h3 className="text-sm font-semibold text-gray-700">Timeline View</h3>
+          <h3 className="text-sm font-semibold text-gray-700">Timeline Vieww</h3>
 
           {/* Date Navigation */}
           <div className="flex items-center space-x-2">
@@ -614,7 +614,7 @@ export function SchedulerGrid({
           {/* Date Headers */}
           <div className="flex border-b sticky top-0 bg-white z-10">
             <div className="bg-gray-100 p-3 border-r flex-shrink-0" style={{ width: "200px" }}>
-              <div className="text-xs font-medium text-gray-600">Team / Date</div>
+              <div className="text-xs font-medium text-gray-600">Team / Dateee</div>
             </div>
             {weekDates.map((dateObj) => (
               <div
@@ -789,7 +789,7 @@ export function SchedulerGrid({
                           </div>
 
                           {/* Tasks positioned on timeline */}
-                          <div className="relative h-full p-2">
+                          <div className="relative h-full">
                             {cellTasks.map((task, index) => {
                               const position = getTaskPosition(task, cellWidth)
                               if (!position) return null
@@ -807,8 +807,8 @@ export function SchedulerGrid({
                                   )}
                                   style={{
                                     ...position,
-                                    top: `${8 + index * 50}px`,
-                                    height: "45px",
+                                    top: `${20 + index * 35}px`,
+                                    height: "30px",
                                     zIndex: 10 + index,
                                   }}
                                   onClick={(e) => {
@@ -817,22 +817,8 @@ export function SchedulerGrid({
                                   }}
                                   title={`${task.title} - ${formatTime(task.startTime!)}${task.endTime ? ` - ${formatTime(task.endTime)}` : ""}`}
                                 >
-                                  {/* Task content remains the same */}
-                                  <div
-                                    className="absolute left-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/task:opacity-100 bg-white/20 rounded-l-lg flex items-center justify-center"
-                                    onMouseDown={(e) => handleResizeStart(e, task.id, "start")}
-                                  >
-                                    <div className="w-1 h-4 bg-white/80 rounded"></div>
-                                  </div>
-
-                                  <div className="flex flex-col justify-center w-full min-w-0 py-1 px-1">
+                                  <div className="flex flex-col justify-center w-full min-w-0 py-1">
                                     <div className="font-semibold truncate text-xs leading-tight">{task.title}</div>
-                                    {task.startTime && (
-                                      <div className="text-xs opacity-90 leading-tight">
-                                        {formatTime(task.startTime)}
-                                        {task.endTime && ` - ${formatTime(task.endTime)}`}
-                                      </div>
-                                    )}
                                   </div>
 
                                   <div className="flex items-center space-x-1 opacity-0 group-hover/task:opacity-100 transition-opacity ml-1">
@@ -860,13 +846,6 @@ export function SchedulerGrid({
                                     >
                                       <Trash2 className="h-2.5 w-2.5" />
                                     </Button>
-                                  </div>
-
-                                  <div
-                                    className="absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/task:opacity-100 bg-white/20 rounded-r-lg flex items-center justify-center"
-                                    onMouseDown={(e) => handleResizeStart(e, task.id, "end")}
-                                  >
-                                    <div className="w-1 h-4 bg-white/80 rounded"></div>
                                   </div>
                                 </div>
                               )

@@ -8,7 +8,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Clock, User, Calendar, Palette } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Clock, User, CalendarIcon, Palette, ChevronDown } from "lucide-react"
+import { format } from "date-fns"
+import { cn } from "@/lib/utils"
 
 interface Task {
   id: string
@@ -19,6 +24,8 @@ interface Task {
   color: string
   startTime?: string
   endTime?: string
+  endDate?: string // For multi-day tasks
+  isMultiDay?: boolean
 }
 
 interface TeamMember {
@@ -50,6 +57,19 @@ const COLORS = [
   { value: "bg-teal-500", label: "Teal", hex: "#14B8A6" },
 ]
 
+// Fix date conversion to avoid timezone issues
+const dateToString = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const stringToDate = (dateString: string): Date => {
+  const [year, month, day] = dateString.split("-").map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export function TaskDialog({
   open,
   onOpenChange,
@@ -65,32 +85,16 @@ export function TaskDialog({
     description: "",
     assignee: "",
     date: "",
+    endDate: "",
     color: "bg-blue-500",
     startTime: "",
     endTime: "",
+    isMultiDay: false,
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
-
-  // Generate dates for the current week and month
-  const generateDates = () => {
-    const dates = []
-    const startDate = new Date("2025-06-01")
-    const endDate = new Date("2025-06-30")
-
-    const currentDate = new Date(startDate)
-    while (currentDate <= endDate) {
-      dates.push({
-        date: currentDate.toISOString().split("T")[0],
-        dayName: currentDate.toLocaleDateString("en-US", { weekday: "long" }),
-        dayMonth: currentDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }),
-      })
-      currentDate.setDate(currentDate.getDate() + 1)
-    }
-    return dates
-  }
-
-  const availableDates = generateDates()
+  const [startDateOpen, setStartDateOpen] = useState(false)
+  const [endDateOpen, setEndDateOpen] = useState(false)
 
   useEffect(() => {
     if (task) {
@@ -99,9 +103,11 @@ export function TaskDialog({
         description: task.description || "",
         assignee: task.assignee,
         date: task.date,
+        endDate: task.endDate || task.date,
         color: task.color,
         startTime: task.startTime || "",
         endTime: task.endTime || "",
+        isMultiDay: task.isMultiDay || false,
       })
     } else {
       setFormData({
@@ -109,13 +115,33 @@ export function TaskDialog({
         description: "",
         assignee: defaultAssignee || "",
         date: defaultDate || "",
+        endDate: defaultDate || "",
         color: "bg-blue-500",
         startTime: "",
         endTime: "",
+        isMultiDay: false,
       })
     }
     setErrors({})
   }, [task, defaultAssignee, defaultDate, open])
+
+  useEffect(() => {
+    if (!open) {
+      // Reset form when dialog closes
+      setFormData({
+        title: "",
+        description: "",
+        assignee: "",
+        date: "",
+        endDate: "",
+        color: "bg-blue-500",
+        startTime: "",
+        endTime: "",
+        isMultiDay: false,
+      })
+      setErrors({})
+    }
+  }, [open])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -129,7 +155,15 @@ export function TaskDialog({
     }
 
     if (!formData.date) {
-      newErrors.date = "Please select a date"
+      newErrors.date = "Please select a start date"
+    }
+
+    if (formData.isMultiDay && !formData.endDate) {
+      newErrors.endDate = "Please select an end date"
+    }
+
+    if (formData.isMultiDay && formData.date && formData.endDate && formData.date > formData.endDate) {
+      newErrors.endDate = "End date must be after start date"
     }
 
     if (formData.startTime && formData.endTime) {
@@ -145,18 +179,24 @@ export function TaskDialog({
   const handleSave = () => {
     if (!validateForm()) return
 
-    if (task) {
-      onSave({ ...task, ...formData })
-    } else {
-      onSave(formData)
+    const taskData = {
+      ...formData,
+      endDate: formData.isMultiDay ? formData.endDate : undefined,
     }
+
+    if (task) {
+      onSave({ ...task, ...taskData })
+    } else {
+      onSave(taskData)
+    }
+
+    // Explicitly close dialog
     onOpenChange(false)
   }
 
   const handleDelete = () => {
     if (task && onDelete) {
       onDelete(task.id)
-      onOpenChange(false)
     }
   }
 
@@ -170,23 +210,45 @@ export function TaskDialog({
   }
 
   const calculateDuration = () => {
-    if (!formData.startTime || !formData.endTime) return ""
+    let dayDuration = ""
+    let timeDuration = ""
 
-    const [startHour, startMin] = formData.startTime.split(":").map(Number)
-    const [endHour, endMin] = formData.endTime.split(":").map(Number)
+    if (formData.isMultiDay && formData.date && formData.endDate) {
+      const startDate = new Date(formData.date)
+      const endDate = new Date(formData.endDate)
+      const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
+      dayDuration = `${diffDays} day${diffDays !== 1 ? "s" : ""}`
+    }
 
-    const startMinutes = startHour * 60 + startMin
-    const endMinutes = endHour * 60 + endMin
-    const duration = endMinutes - startMinutes
+    if (formData.startTime && formData.endTime) {
+      const [startHour, startMin] = formData.startTime.split(":").map(Number)
+      const [endHour, endMin] = formData.endTime.split(":").map(Number)
 
-    if (duration <= 0) return ""
+      const startMinutes = startHour * 60 + startMin
+      const endMinutes = endHour * 60 + endMin
+      const duration = endMinutes - startMinutes
 
-    const hours = Math.floor(duration / 60)
-    const minutes = duration % 60
+      if (duration > 0) {
+        const hours = Math.floor(duration / 60)
+        const minutes = duration % 60
 
-    if (hours === 0) return `${minutes}m`
-    if (minutes === 0) return `${hours}h`
-    return `${hours}h ${minutes}m`
+        if (formData.isMultiDay) {
+          // For multi-day: start time on start date, end time on end date
+          timeDuration = `${formatTime(formData.startTime)} start - ${formatTime(formData.endTime)} end`
+        } else {
+          // For single day: show duration
+          if (hours === 0) timeDuration = `${minutes}m`
+          else if (minutes === 0) timeDuration = `${hours}h`
+          else timeDuration = `${hours}h ${minutes}m`
+        }
+      }
+    }
+
+    if (dayDuration && timeDuration) {
+      return `${dayDuration} (${timeDuration})`
+    }
+    return dayDuration || timeDuration || ""
   }
 
   const selectedColor = COLORS.find((c) => c.value === formData.color)
@@ -198,15 +260,14 @@ export function TaskDialog({
           <DialogTitle className="flex items-center space-x-2">
             <div className={`w-4 h-4 rounded ${formData.color}`}></div>
             <span>{task ? "Edit Task" : "Create New Task"}</span>
+            {formData.isMultiDay && <Badge variant="secondary">Multi-day</Badge>}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
           {/* Task Title */}
           <div className="space-y-2">
-            <Label htmlFor="title" className="flex items-center space-x-2">
-              <span>Task Title *</span>
-            </Label>
+            <Label htmlFor="title">Task Title *</Label>
             <Input
               id="title"
               value={formData.title}
@@ -229,54 +290,137 @@ export function TaskDialog({
             />
           </div>
 
-          {/* Assignee and Date Row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="assignee" className="flex items-center space-x-2">
-                <User className="h-4 w-4" />
-                <span>Assignee *</span>
-              </Label>
-              <Select
-                value={formData.assignee}
-                onValueChange={(value) => setFormData({ ...formData, assignee: value })}
-              >
-                <SelectTrigger className={errors.assignee ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select assignee" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamMembers.map((member) => (
-                    <SelectItem key={member.id} value={member.name}>
-                      <div className="flex items-center space-x-2">
-                        <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
-                          {member.name.charAt(0)}
-                        </div>
-                        <span>{member.name}</span>
+          {/* Assignee */}
+          <div className="space-y-2">
+            <Label htmlFor="assignee" className="flex items-center space-x-2">
+              <User className="h-4 w-4" />
+              <span>Assignee *</span>
+            </Label>
+            <Select value={formData.assignee} onValueChange={(value) => setFormData({ ...formData, assignee: value })}>
+              <SelectTrigger className={errors.assignee ? "border-red-500" : ""}>
+                <SelectValue placeholder="Select assignee" />
+              </SelectTrigger>
+              <SelectContent>
+                {teamMembers.map((member) => (
+                  <SelectItem key={member.id} value={member.name}>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs">
+                        {member.name.charAt(0)}
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.assignee && <p className="text-sm text-red-500">{errors.assignee}</p>}
-            </div>
+                      <span>{member.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.assignee && <p className="text-sm text-red-500">{errors.assignee}</p>}
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="date" className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4" />
-                <span>Date *</span>
-              </Label>
-              <Select value={formData.date} onValueChange={(value) => setFormData({ ...formData, date: value })}>
-                <SelectTrigger className={errors.date ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select date" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDates.map((dateObj) => (
-                    <SelectItem key={dateObj.date} value={dateObj.date}>
-                      {dateObj.dayName}, {dateObj.dayMonth}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.date && <p className="text-sm text-red-500">{errors.date}</p>}
+          {/* Multi-day Toggle */}
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="multiDay"
+              checked={formData.isMultiDay}
+              onCheckedChange={(checked) => {
+                setFormData({
+                  ...formData,
+                  isMultiDay: checked,
+                  endDate: checked ? formData.endDate || formData.date : "",
+                })
+              }}
+            />
+            <Label htmlFor="multiDay" className="flex items-center space-x-2">
+              <CalendarIcon className="h-4 w-4" />
+              <span>Multi-day event</span>
+            </Label>
+          </div>
+
+          {/* Date Selection */}
+          <div className="space-y-4">
+            <div className={cn("grid gap-4", formData.isMultiDay ? "grid-cols-2" : "grid-cols-1")}>
+              {/* Start Date */}
+              <div className="space-y-2">
+                <Label className="flex items-center space-x-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  <span>{formData.isMultiDay ? "Start Date *" : "Date *"}</span>
+                </Label>
+                <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.date && "text-muted-foreground",
+                        errors.date && "border-red-500",
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.date ? format(stringToDate(formData.date), "PPP") : "Pick a date"}
+                      <ChevronDown className="ml-auto h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={formData.date ? stringToDate(formData.date) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const dateString = dateToString(date)
+                          setFormData({ ...formData, date: dateString })
+                          setStartDateOpen(false)
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors.date && <p className="text-sm text-red-500">{errors.date}</p>}
+              </div>
+
+              {/* End Date (Multi-day only) */}
+              {formData.isMultiDay && (
+                <div className="space-y-2">
+                  <Label className="flex items-center space-x-2">
+                    <CalendarIcon className="h-4 w-4" />
+                    <span>End Date *</span>
+                  </Label>
+                  <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !formData.endDate && "text-muted-foreground",
+                          errors.endDate && "border-red-500",
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.endDate ? format(stringToDate(formData.endDate), "PPP") : "Pick end date"}
+                        <ChevronDown className="ml-auto h-4 w-4" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={formData.endDate ? stringToDate(formData.endDate) : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            const dateString = dateToString(date)
+                            setFormData({ ...formData, endDate: dateString })
+                            setEndDateOpen(false)
+                          }
+                        }}
+                        disabled={(date) => {
+                          if (!formData.date) return false
+                          return date < stringToDate(formData.date)
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {errors.endDate && <p className="text-sm text-red-500">{errors.endDate}</p>}
+                </div>
+              )}
             </div>
           </div>
 
@@ -309,21 +453,24 @@ export function TaskDialog({
                 {errors.endTime && <p className="text-sm text-red-500">{errors.endTime}</p>}
               </div>
             </div>
-
-            {/* Time Summary */}
-            {formData.startTime && (
-              <div className="flex items-center space-x-4 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                <div className="flex items-center space-x-1">
-                  <Clock className="h-4 w-4" />
-                  <span>
-                    {formatTime(formData.startTime)}
-                    {formData.endTime && ` - ${formatTime(formData.endTime)}`}
-                  </span>
-                </div>
-                {calculateDuration() && <Badge variant="outline">Duration: {calculateDuration()}</Badge>}
-              </div>
-            )}
           </div>
+
+          {/* Duration Summary */}
+          {calculateDuration() && (
+            <div className="flex items-center space-x-4 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+              <div className="flex items-center space-x-1">
+                <Clock className="h-4 w-4" />
+                <span>Duration: {calculateDuration()}</span>
+              </div>
+              {formData.startTime && (
+                <span>
+                  {formatTime(formData.startTime)}
+                  {formData.endTime && ` - ${formatTime(formData.endTime)}`}
+                  {formData.isMultiDay ? "" : ""}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Color Selection */}
           <div className="space-y-3">
@@ -354,7 +501,7 @@ export function TaskDialog({
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t">
-            <Button onClick={handleSave} className="flex-1">
+            <Button onClick={handleSave} className="flex-1 bg-black text-white hover:bg-gray-800">
               {task ? "Update Task" : "Create Task"}
             </Button>
             {task && onDelete && (
@@ -370,8 +517,4 @@ export function TaskDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function cn(...classes: (string | undefined | boolean)[]): string {
-  return classes.filter(Boolean).join(" ")
 }
